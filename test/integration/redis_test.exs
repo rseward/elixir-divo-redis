@@ -3,14 +3,15 @@ defmodule RedisTest do
 
   describe "Redis" do
     test "is available" do
-      assert Redis.ping() == "PONG"
+      :true
     end
 
     test "read and persist to Redis" do
-      {:ok, :conn} = Redis.start_link(host: "localhost", port: 6379)
-      assert Redis.set(:conn, "mykey", "value") == :ok
-      assert Redis.get(:conn, "mykey") == "value"
-      assert Redis.del(:conn, "mykey") == :ok
+      {:ok, conn} = Redix.start_link(host: "localhost", port: 6379)
+      assert Redix.command(conn,["PING"]) == {:ok, "PONG"}
+      assert Redix.command(conn, ["SET", "mykey", "value"]) == {:ok, "OK"}
+      assert Redix.command(conn, ["GET","mykey"]) == {:ok, "value"}
+      assert Redix.command(conn, ["DEL", "mykey"] ) == {:ok, 1}
     end
   end
 end
