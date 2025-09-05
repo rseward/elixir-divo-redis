@@ -19,6 +19,8 @@ end
 defmodule RedixConnection do
   # Read more at: https://ubuntuask.com/blog/how-to-retry-connect-ampq-in-elixir
 
+  require Logger
+
   @retry_interval 5000
   @max_retries 3
   @redis_host "localhost"
