@@ -2,14 +2,20 @@ defmodule RedisTest do
   use ExUnit.Case
   require Logger
 
+# In my environments, this test fails to connect to 127.0.0.1 on Windows 11, WSL2, podman and Linux.
+# However fetching the container IP address works. Conversly on Linux with podman, the test succeeds with 127.0.0.1
+# but fails with the container IP. Ergo this test attempts both Redis tests in parallel and reports success if
+# at least one succeeds.
+
   describe "Redis" do
     test "read and persist to Redis" do
-      {:ok, conn1} = RedixConnection.connect(redis_container_ip())
+      container_ip = redis_container_ip()
+      {:ok, conn1} = RedixConnection.connect(container_ip)
       {:ok, conn2} = RedixConnection.connect("127.0.0.1")
 
       tasks = [
-        Task.async(fn -> test_redis(conn1) end),
-        Task.async(fn -> test_redis(conn2) end)
+        Task.async(fn -> test_redis({container_ip, conn1}) end),
+        Task.async(fn -> test_redis({"127.0.0.1", conn2}) end)
       ]
 
       results = Enum.map(tasks, fn task -> Task.await(task, 10000) end)
@@ -17,12 +23,27 @@ defmodule RedisTest do
       Redix.stop(conn1)
       Redix.stop(conn2)
 
+      # Log which tests succeeded
+      [container_result, localhost_result] = results
+
+      cond do
+        container_result == :ok and localhost_result == :ok ->
+          Logger.info("** Both Redis container IP and localhost tests succeeded **")
+        container_result == :ok ->
+          Logger.info("** Only Redis container IP (#{container_ip}) test succeeded **")
+        localhost_result == :ok ->
+          Logger.info("** Only localhost (127.0.0.1) test succeeded **")
+        true ->
+          Logger.error("** Both Redis connection tests failed **")
+      end
+
       assert Enum.any?(results, fn result -> result == :ok end),
              "At least one Redis connection test must succeed"
     end
   end
 
-  defp test_redis(conn) do
+  defp test_redis(conninfo) do
+    {host, conn} = conninfo
     try do
       Logger.info("Testing Redis connection...")
       assert Redix.command(conn, ["PING"]) == {:ok, "PONG"}
@@ -32,7 +53,7 @@ defmodule RedisTest do
       :ok
     rescue
       e ->
-        Logger.warn("Failed to test Redis connection: #{inspect(e)}")
+        Logger.warn("Redis connection (#{host}) test failed: #{inspect(e)}")
         :error
     end
   end
